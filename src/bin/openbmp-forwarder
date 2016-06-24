@@ -15,6 +15,8 @@ import logging
 import yaml
 import time
 import signal
+import re
+import ipaddress
 
 from multiprocessing import Queue, Manager
 from openbmp.logger import LoggerThread
@@ -46,6 +48,14 @@ def signal_handler(signum, frame):
 
     RUNNING = False
 
+def log_print(content, isError=False):
+    if LOG:
+        if isError:
+            LOG.error(content)
+        else:
+            LOG.debug(content)
+    else:
+        print (content)
 
 def load_config(cfg_filename, LOG):
     """ Load and validate the configuration from YAML
@@ -80,34 +90,12 @@ def load_config(cfg_filename, LOG):
             cfg['kafka']['group_id'] = APP_NAME
             cfg['kafka']['offset_reset_largest'] = False
 
-        if 'collector' in cfg:
-            if 'host' not in cfg['collector']:
-                if LOG:
-                    LOG.error("Configuration is missing 'host' in collector section")
-                else:
-                    print ("Configuration is missing 'host' in collector section")
-                sys.exit(2)
-
-            if 'port' not in cfg['collector']:
-                if LOG:
-                    LOG.error("Configuration is missing 'port' in collector section, using default of 5000")
-                else:
-                    print ("Configuration is missing 'port' in collector section, using default of 5000")
-
-                cfg['collector']['port'] = 5000
-
-        else:
-            if LOG:
-                LOG.error("Configuration is missing 'collector' section.")
-            else:
-                print ("Configuration is missing 'collector' section.")
+        if 'dest_peer_groups' not in cfg:
+            log_print("Configuration is missing 'dest_peer_groups' section.", True)
             sys.exit(2)
 
         if 'logging' not in cfg:
-            if LOG:
-                LOG.error("Configuration is missing 'logging' section.")
-            else:
-                print ("Configuration is missing 'logging' section.")
+            log_print("Configuration is missing 'logging' section.", True)
             sys.exit(2)
 
     except (IOError, yaml.YAMLError), e:
@@ -174,6 +162,48 @@ def parse_cmd_args(argv):
     return cfg
 
 
+def parse_peer_group(cfg):
+    """
+    Parse dest_peer_group in config.
+    """
+    peer_groups = cfg['dest_peer_groups']
+    for i, peer_exp in enumerate(peer_groups):
+        name = peer_exp['name']
+        log_print('Config: dest_peer_group name = {}'.format(name))
+        if 'collector' not in peer_exp:
+            log_print('dest_peer_group {} is missing \'collector\' section.'.format(name), True)
+            sys.exit(2)
+        if type(peer_exp['regexp_hostname'] is list):
+            try:
+                peer_exp['regexp_hostname'] = [re.compile(regex) for regex in peer_exp['regexp_hostname']]
+                log_print('Config: compiled regexp hostname: {}'.format(peer_exp['regexp_hostname']))
+            except re.error as err:
+                log_print('Invalid regular expression pattern: {}'.format(err), True)
+                sys.exit(2)
+        else:
+            log_print('Invalid regexp_hostname config: should be list.', True)
+        if type(peer_exp['prefix_range'] is list):
+            try:
+                peer_exp['prefix_range'] = [ipaddress.ip_network(unicode(prefix_exp)) for prefix_exp in
+                                            peer_exp['prefix_range']]
+                log_print('Config: parse prefix_range successful: {}'.format(peer_exp['prefix_range']))
+            except Exception as err:
+                log_print('Invalid prefix range given: {}'.format(err), True)
+                sys.exit(2)
+        else:
+            log_print('Invalid prefix_range config: should be list.', True)
+            sys.exit(2)
+        if type(peer_exp['asn'] is list):
+            for asn in peer_exp['asn']:
+                if type(asn) is not int:
+                    log_print("Invalid asn, must be int", True)
+                    sys.exit(2)
+        else:
+            log_print('Invalid asn config: should be list.', True)
+            sys.exit(2)
+    cfg['dest_peer_groups'] = peer_groups
+
+
 def main():
     """ Main entry point """
     global LOG, RUNNING
@@ -187,7 +217,7 @@ def main():
     cfg_dict['max_queue_size'] = cfg['max_queue_size']
     cfg_dict['logging'] = cfg['logging']
     cfg_dict['kafka'] = cfg['kafka']
-    cfg_dict['collector'] = cfg['collector']
+    cfg_dict['dest_peer_groups'] = cfg['dest_peer_groups']
 
     # Setup signal handers
     signal.signal(signal.SIGTERM, signal_handler)
@@ -199,7 +229,10 @@ def main():
     thread_logger = LoggerThread(log_queue, cfg_dict['logging'])
     thread_logger.start()
 
+    logging.basicConfig()
     LOG = logging.getLogger()
+
+    parse_peer_group(cfg_dict)
 
     # Use manager queue to ensure no duplicates
     forward_queue = manager.Queue(cfg_dict['max_queue_size'])

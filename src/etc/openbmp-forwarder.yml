@@ -14,12 +14,53 @@ kafka:
   group_id            : 'openbmp-forwarder'
   offset_reset_largest: False
 
+# Peer group settings - Allow sending to multiple BMP destinations based on selected peers
+# Order of matching
+#    Matching order is performed in the following sequence. The first match found is used.
 #
-# Collector - Where to send the BMP forwarded messages
-#
-collector:
-  host: 10.1.1.1
-  port: 5000
+#    regexp_hostname - Hostname/regular expression is used first
+#    prefix_range    - Prefix range is used second
+#    asn             - Peer asn list
+dest_peer_groups:
+  # name defines the value that is substituted for the variable.  This provides a consistent
+  #    mapping for different IP's and hostnames
+  - name: "lab"
+
+    # You can specify which collector receives message about matched peers
+    collector:
+      host: 10.1.1.1
+      port: 5000
+
+    # You can define a list of regexp's that match for hostname to group mapping
+    regexp_hostname:
+       - .*\.lab\..*
+
+    # You can also define a list of prefixes that match for ip to group mapping
+    prefix_range:
+       - 10.100.100.0/24
+       - 10.100.104.0/24
+
+    # You can define the matching to look at the peer asn.
+    asn:
+      - 100
+      - 65000
+      - 65001
+
+  # Keep this, it's the default entry
+  - name: "default"
+
+    collector:
+      host: 10.1.1.1
+      port: 5000
+
+    regexp_hostname:
+      - .*
+
+    prefix_range:
+      - 0.0.0.0/0
+
+    asn:
+      - 0
 
 #
 # Log settings
@@ -60,7 +101,6 @@ logging:
       level: INFO
       handlers: [file]
       propagate: no
-
 
     # General/main program messages
     root:
