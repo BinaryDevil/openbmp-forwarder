@@ -168,6 +168,9 @@ def parse_peer_group(cfg):
     """
     peer_groups = cfg['dest_peer_groups']
     for i, peer_exp in enumerate(peer_groups):
+        if 'name' not in peer_exp:
+            log_print('dest_peer_group with index {} is missing \'name\' section.'.format(i), True)
+            sys.exit(2)
         name = peer_exp['name']
         log_print('Config: dest_peer_group name = {}'.format(name))
         if 'collector' not in peer_exp:
