@@ -221,6 +221,7 @@ def main():
     cfg_dict['logging'] = cfg['logging']
     cfg_dict['kafka'] = cfg['kafka']
     cfg_dict['dest_peer_groups'] = cfg['dest_peer_groups']
+    cfg_dict['collector_heartbeat_interval'] = cfg['collector_heartbeat_interval']
 
     # Setup signal handers
     signal.signal(signal.SIGTERM, signal_handler)
