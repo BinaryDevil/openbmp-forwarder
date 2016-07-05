@@ -16,9 +16,10 @@ kafka:
 
 #
 # The number of seconds after last collector heartbeat to determine if the collector is dead
+# Collector is considered dead after 1.1*THIS VALUE(int) after last heartbeat
 # If a collector is dead, a series of PEER_DOWN will be generated to be sent to all corresponding dest_peer_group
 #
-collector_heartbeat_interval: 10
+collector_heartbeat_interval: 5000
 
 # Peer group settings - Allow sending to multiple BMP destinations based on selected peers
 # Order of matching
